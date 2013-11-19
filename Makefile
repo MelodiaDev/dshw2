@@ -1,1 +1,1 @@
-CXXFLAGS = -O3
+CXXFLAGS = -O3 -mcmodel=medium
