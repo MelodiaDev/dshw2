@@ -8,7 +8,8 @@
 #include <cctype>
 #include<algorithm>
 using namespace std;
-const int min_num=1000;		//min_num记录最小支持度
+double r;
+int min_num;		//min_num记录最小支持度
 int num[20010];
 int max_num=0;	
 class point		//每个项目的名称和出现次数 
@@ -66,10 +67,8 @@ void initialization()
 	int t,j,x,max=0;
 	point p;
 	 
-	/* 从文件读入 */ 
-	FILE *fp = fopen("retail.dat", "r");	
-	if (fp == NULL) {printf("input error!");exit(0);}
-    while (fgets(st, 1000000, fp))
+	/* 读入 */ 
+    while (fgets(st, 1000000, stdin))
     {
 		single_list.clear();
 		char *p = st;
@@ -80,6 +79,7 @@ void initialization()
 		list.push_back(single_list);
 	}
     infile.close();
+	min_num = list.size() * r;
    
    /* 把支持度大于最小支持度的项目加入num_rank,并按照支持度排序 */ 
     for (j=0;j<=max;j++)
@@ -241,9 +241,9 @@ void mine_tree()
 	
 }
 	
-int main()
+int main(int argc, char **argv)
 {
-	freopen("out.txt","w",stdout);
+	sscanf(argv[1], "%lf", &r);
 	initialization();	//初始化 
 	creat_tree();	    //构造fp树 
 	mine_tree();		//挖掘fp树 

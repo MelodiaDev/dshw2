@@ -17,7 +17,7 @@ VII a[MAXN];
 vector<VII> last, now, Ans;
 
 int n, x; bool vis[MAXN];
-double delta = 0.5;
+double delta;
 
 inline int Count(const VII &now, const VII& T) {
 	foreach(it, now) {
@@ -35,8 +35,8 @@ inline bool check(const VII &now) {
 
 set<int> S;
 
-int main(void) {
-	freopen("data/retail.dat", "r", stdin);
+int main(int argc, char **argv) {
+	sscanf(argv[1], "%lf", &delta);
 	string st; n = 0;
 	while (getline(cin, st)) {
 		stringstream fin(st);
