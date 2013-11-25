@@ -1,4 +1,3 @@
-/* 测试数据里不包含文件名及最小支持度信息,需自行更改 （line 11 ,line 70) */ 
 #include<iostream>
 #include<cstdlib>
 #include<fstream>
@@ -7,6 +6,8 @@
 #include<cstring>
 #include <cctype>
 #include<algorithm>
+#include<set>
+#include<map>
 using namespace std;
 double r;
 int min_num;		//min_num记录最小支持度
@@ -25,12 +26,14 @@ class point		//每个项目的名称和出现次数
 struct node		//fp树中每个节点的数据结构 
 {
 	int num,time;
-	node *child,*pre,*next,*father,*sibling;
+	node *pre,*next,*father;
+	map<int, node*> childmap;
 };
 node *number[18010]={NULL};		//将fp树中相同的项目相连，每个项目头结点存入number 
 node *head=NULL;	//fp树头指针 
 vector<point> num_rank;		 //记录每个项目支持度的排名 
 vector<vector<int> > list;	  //记录事务数（每条事务数按支持度排序） 
+vector<pair<int,vector<int> > > result; //记录结果
 
 
 /* 初始化部分 */ 
@@ -117,28 +120,24 @@ void link_number(node* t,int x)
 /* 将新节点插入fp树 */
 node* insert(node *t,int num)
 {
-	node *p,*pp;
-	/*该节点的父节点没有子节点，之间将其设为子节点 */
-	if (t->child==NULL) 	
+	/* 在父节点的子节点map中查找 */
+	map<int,node*>::iterator i=t->childmap.find(num);
+	node *p;
+	/* 如果没有就新建一个节点插入map中 */
+	if (i==t->childmap.end())
 	{
 		p=new node;
-		p->time=1;p->num=num;p->child=NULL;p->next=NULL;p->pre=NULL;p->sibling=NULL;p->father=t;t->child=p;
+		p->time=1;p->num=num;p->next=p->pre=NULL;p->father=t;
 		link_number(p,num);
+		t->childmap.insert(pair<int,node*>(num,p));
 		return p;
 	}
-	
-	p=t->child;
-	while (p!=NULL)
+	/* 否则直接time+1 */
+	else
 	{
-		if (p->num== num) {p->time++;return p;}		//父节点存在该项目作为子节点，直接time+1 
-		pp=p;
-		p=p->sibling;
+		i->second->time++;
+		return i->second;
 	}
-	
-	/* 不存在该项目作为子节点，新建一个子节点*/ 
-	node *q=new node;
-	q->time=1;q->num=num;q->child=NULL;q->pre=NULL;q->next=NULL;q->father=t;q->sibling=NULL;pp->sibling=q;
-	link_number(q,num);t=q;return q;
 }
 
 /* 构造fp树 */ 
@@ -150,14 +149,15 @@ void creat_tree()
 	vector<int> ::const_iterator j;
 	/* 初始化树根 */ 
 	head=new node;
-	head->num=-1;head->time=0;head->father=NULL;head->child=NULL;head->pre=NULL;head->next=NULL;head->sibling=NULL;
+	head->num=-1;head->time=0;head->father=NULL;head->pre=NULL;head->next=NULL;
 	
 	/* 对于第一个事务进行特殊处理,直接插入树中 */ 
 	j=i->begin();temp=head;
 	while (j!=i->end() && num[*j]!=-1)
 	{
 		p=new node;
-		p->num=*j;p->time=1;p->father=temp;p->next=NULL;p->pre=NULL;p->child=NULL;p->sibling=NULL;temp->child=p;
+		p->num=*j;p->time=1;p->father=temp;p->next=NULL;p->pre=NULL;
+		temp->childmap.insert(pair<int,node*>(*j,p));
 		link_number(p,*j);	//相同项目在树中位置相连 
 		temp=p;++j;
 	}
@@ -179,66 +179,106 @@ void creat_tree()
 struct point1
 {
 	int time;
-	vector<int> list;
+	node *endpoint;
+	friend bool operator <(point1 a,point1 b) {
+		return num[a.endpoint->num]<num[b.endpoint->num]||num[a.endpoint->num]==num[b.endpoint->num]&&a.endpoint<b.endpoint;
+	}
 };
 vector<point1> item;
 
-/* 判断编号为x的事务是否包含在编号为y的事务里 */ 
-inline bool subset(int x,int y)
-{
-	vector<int>::const_iterator i,j;
-	j=item[x].list.begin();
-	for (i=item[y].list.begin();i!=item[y].list.end();++i)
-	{
-		if (*i==*j) {++j;if (j==item[x].list.end()) return true;}
-	}
-	return false;
-}
-
-inline bool cmp1(const point1& x, const point1& y) {
-	return x.list.size() > y.list.size();
-}
 /* 挖掘  */ 
+
+int now[10000];
+
+/* 递归向上扩展频繁项集 */
+void dfs(const vector<point1>& item, int dep)
+{
+	/* 计算出现次数 */
+	int time=0;
+	for (vector<point1>::const_iterator i=item.begin();i!=item.end();i++)
+		time+=i->time;
+	if (time<min_num) return;
+	now[dep] = item[0].endpoint->num;
+	vector<int> l(now,now+dep+1);
+	result.push_back(pair<int,vector<int> >(-time,l));
+
+	/* 向上扩展*/
+	/* 将父亲节点插入set中 */
+	set<point1> q;
+	for (vector<point1>::const_iterator i=item.begin();i!=item.end();i++)
+		if (i->endpoint->father!=head)
+		{
+			point1 tmp;
+			tmp.time=i->time;
+			tmp.endpoint=i->endpoint->father;
+			q.insert(tmp);
+		}
+
+	/* 每次取最不频繁项并找出所有这样的祖先递归下去 */
+	vector<point1> item_temp;
+	while (!q.empty())
+	{
+		int num=q.begin()->endpoint->num;
+		item_temp.clear();
+		while (!q.empty()&&q.begin()->endpoint->num==num)
+		{
+			item_temp.push_back(*q.begin());
+			/* 把它的父亲节点再插入进set里 */
+			if (q.begin()->endpoint->father!=head)
+			{
+				point1 tmp;
+				tmp.time=q.begin()->time;
+				tmp.endpoint=q.begin()->endpoint->father;
+				q.erase(q.begin());
+				/* 合并相同祖先 */
+				set<point1>::iterator it=q.find(tmp);
+				if (it!=q.end())
+					tmp.time += it->time, q.erase(it);
+				q.insert(tmp);
+			}
+			else q.erase(q.begin());
+		}
+		dfs(item_temp, dep+1);
+	}
+}
 void mine_tree()
 {
 	int i,j,k;
 	vector<int>::iterator l;
 	point1 temp_list;
 	node *t,*p;
-	for (i=1;i<=max_num;i++)	//从支持度最小的项开始挖掘 
+	for (i=0;i<num_rank.size()&&num_rank[i].time>=min_num;i++)	//从支持度最小的项开始挖掘 
 	{
-		item.clear();p=number[i];
+		/*找出所有这个项对应的节点*/
+		item.clear();p=number[num_rank[i].name];
 		while (p!=NULL)
 		{
-			t=p;temp_list.list.clear();		//产生一个临时存放项目组的数组 
-		    temp_list.time=t->time;
-	        while (t->num!=-1)
-	        {
-			    temp_list.list.push_back(t->num);
-			    t=t->father;
-		    }
+			temp_list.time=p->time;
+			temp_list.endpoint=p;
 		    item.push_back(temp_list);
 		    p=p->pre;
 		}
-		sort(item.begin(),item.end(),cmp1);
 		
-		/* 计算每个项目组出现的次数 */ 
-		for (j=item.size()-1;j>0;j--)
-		    for (k=j-1;k>=0;k--)
-		    {
-				if (subset(j,k)) item[j].time+=item[k].time;	//合并 
-			}
-			
-		/* 结果输出 */ 
-		for (j=0;j<item.size();j++)
-		{
-			if (item[j].time<min_num) continue;		//判断是否达到最小支持度 
-			for (l=item[j].list.begin();l!=item[j].list.end();++l)	
-				printf("%d ",*l);
-			printf(":%d\n",item[j].time);
-		}		
+		dfs(item, 0);
 	}
 	
+}
+
+/* 排序、输出结果 */
+void output()
+{
+	for (vector<pair<int,vector<int> > >::iterator i=result.begin();i!=result.end();i++)
+		sort(i->second.begin(),i->second.end());
+	sort(result.begin(),result.end());
+
+	printf("%d\n",result.size());
+	for (vector<pair<int,vector<int> > >::iterator i=result.begin();i!=result.end();i++)
+	{
+		printf("%d",i->second[0]);
+		for (vector<int>::iterator j=++i->second.begin();j!=i->second.end();j++)
+			printf(" %d",*j);
+		printf(": %d\n",-i->first);
+	}
 }
 	
 int main(int argc, char **argv)
@@ -247,6 +287,7 @@ int main(int argc, char **argv)
 	initialization();	//初始化 
 	creat_tree();	    //构造fp树 
 	mine_tree();		//挖掘fp树 
+	output();
 	return 0;
 }
-	
+
